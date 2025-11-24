@@ -1,0 +1,12 @@
+Etapes :
+
+- mettre une authentification pour lancer le logiciel (utilisation de l'api)
+
+- pour le rien stocker en ligne, mettre une fonction de téléchargement des fichiers modifiés
+
+- MAJ de gitignore (fichiers backups à exclure)
+
+- upload dans github et msie en ligne sur streamlit
+
+
+(- export écriture pour comptabilité paris)

@@ -1,0 +1,74 @@
+# =========================
+# ENVIRONNEMENTS VIRTUELS
+# =========================
+venv/
+.venv/
+
+# =========================
+# FICHIERS DE CONFIG / VARIABLES SECRÈTES
+# =========================
+.env
+*.env
+
+# =========================
+# DONNÉES & BASES DE DONNÉES
+# =========================
+*.db
+Comptabilité.db
+backups/
+archives/
+temp_files/
+data/*.pdf
+
+# =========================
+# PYTHON COMPILÉ
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+
+# =========================
+# LOGS & TEMPORAIRES
+# =========================
+*.log
+*.pot
+*.pyproj
+*.tmp
+*.bak
+*.swp
+*.DS_Store
+
+# =========================
+# PACKAGES & DÉPENDANCES
+# =========================
+build/
+dist/
+*.egg-info/
+
+# =========================
+# FICHIERS JUPYTER / IPYNB
+# =========================
+.ipynb_checkpoints/
+
+# =========================
+# VISUAL STUDIO CODE
+# =========================
+.vscode/
+.history/
+
+# =========================
+# TESTS / COVERAGE
+# =========================
+.coverage
+htmlcov/
+.tox/
+.nox/
+pytest_cache/
+.cache/
+
+# =========================
+# AUTRES
+# =========================
+.mypy_cache/
+.pytest_cache/
+run.py
