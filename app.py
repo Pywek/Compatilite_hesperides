@@ -478,11 +478,17 @@ def main():
 
             # --- COLONNE DROITE : PREVIEW ---
             with col2:
-                # Affichage du PDF de preview
-                with open(preview_path, "rb") as f:
-                    base64_pdf = base64.b64encode(f.read()).decode('utf-8')
-                pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="800" type="application/pdf"></iframe>'
-                st.markdown(pdf_display, unsafe_allow_html=True)
+                st.markdown("### Prévisualisation")
+                # Affichage du PDF avec streamlit-pdf-viewer
+                from streamlit_pdf_viewer import pdf_viewer
+                try:
+                    with open(preview_path, "rb") as f:
+                        pdf_viewer(f.read(), height=800)
+                except Exception as e:
+                    st.error(f"Erreur d'affichage du PDF : {e}")
+                    # Fallback : bouton de téléchargement
+                    with open(preview_path, "rb") as f:
+                        st.download_button("📄 Télécharger la prévisualisation", f, file_name="preview.pdf", mime="application/pdf")
 
 if __name__ == "__main__":
     main()
