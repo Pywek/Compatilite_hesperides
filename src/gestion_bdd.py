@@ -232,3 +232,77 @@ def update_regles_fournisseur(nom_fournisseur: str, comptes_regles: list, db_url
     finally:
         if conn:
             conn.close()
+
+def get_tous_les_fournisseurs(db_url: str):
+    """
+    Récupère la liste complète des fournisseurs et de leurs configurations.
+    Retourne une liste de tuples ou de dictionnaires.
+    """
+    conn = None
+    try:
+        conn = get_db_connection(db_url)
+        cursor = conn.cursor()
+        
+        sql_query = """
+        SELECT id, fournisseur, fournisseur_associe, mode,
+               compte1, regle1, compte2, regle2, compte3, regle3,
+               compte4, regle4, compte5, regle5, compte6, regle6
+        FROM fournisseurs_comptes_associes
+        ORDER BY fournisseur ASC
+        """
+        cursor.execute(sql_query)
+        rows = cursor.fetchall()
+        
+        # On peut retourner une liste de dictionnaires pour plus de facilité
+        fournisseurs = []
+        colonnes = [desc[0] for desc in cursor.description]
+        
+        for row in rows:
+            fournisseurs.append(dict(zip(colonnes, row)))
+            
+        return fournisseurs
+    except Exception as e:
+        print(f"Erreur BDD (get_all) : {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+def update_fournisseur_full(old_nom_fournisseur: str, new_data: dict, db_url: str):
+    """
+    Met à jour toutes les informations d'un fournisseur.
+    Gère aussi le changement de nom (clé unique).
+    """
+    conn = None
+    try:
+        conn = get_db_connection(db_url)
+        cursor = conn.cursor()
+        
+        # Liste des champs à mettre à jour
+        fields = [
+            "fournisseur", "fournisseur_associe", "mode",
+            "compte1", "regle1", "compte2", "regle2", "compte3", "regle3",
+            "compte4", "regle4", "compte5", "regle5", "compte6", "regle6"
+        ]
+        
+        set_clauses = [f"{field} = %s" for field in fields]
+        values = [new_data.get(field) for field in fields]
+        
+        # Ajout de l'ancien nom pour le WHERE
+        values.append(old_nom_fournisseur)
+        
+        sql_query = f"""
+        UPDATE fournisseurs_comptes_associes
+        SET {', '.join(set_clauses)}
+        WHERE fournisseur = %s
+        """
+        
+        cursor.execute(sql_query, values)
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Erreur BDD (update full) : {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()

@@ -1,12 +1,22 @@
 Etapes :
 
-- mettre une authentification pour lancer le logiciel (utilisation de l'api)
-
+V1.2
 - pour le rien stocker en ligne, mettre une fonction de téléchargement des fichiers modifiés
+
+
+- upload dans github et msie en ligne sur streamlit
+
+V1.1
+- mettre une authentification pour lancer le logiciel (utilisation de l'api)
+creation mdp 
+
+
+-creation base de données PostgreSQL et appel à cette base de données pour stocker les données (site web : Neon.tech)
+
+- stockage secret dans .env
 
 - MAJ de gitignore (fichiers backups à exclure)
 
-- upload dans github et msie en ligne sur streamlit
 
 
 (- export écriture pour comptabilité paris)
