@@ -7,7 +7,7 @@ import zipfile
 import io
 from datetime import datetime
 from dotenv import load_dotenv
-from src.gestion_bdd import initialiser_bdd, bdd_est_disponible, ajouter_fournisseur_db, trouver_associations_fournisseur, update_regles_fournisseur
+from src.gestion_bdd import initialiser_bdd, bdd_est_disponible, ajouter_fournisseur_db, trouver_associations_fournisseur, update_regles_fournisseur, ajouter_ecriture_comptable
 from src.appels_ia import initialisation_client_gemini, get_infos_facture, application_regle_imputation_V2
 from src.pdf_manager import ajouter_texte_definitif
 from src.compression_pdf import compresser_pdf
@@ -357,6 +357,9 @@ def main():
                 # Construction du texte rouge (Fournisseur + Comptes/Montants)
                 lignes_rouge = [f" {nom_fournisseur_final.upper()}"]
                 
+                # Liste pour stocker les écritures à sauvegarder
+                ecritures_a_sauvegarder = []
+
                 if mode_manuel:
                     st.markdown("#### Saisie des comptes")
                     comptes_manuels_pour_db = []
@@ -368,6 +371,7 @@ def main():
                         if compte_man and montant_man:
                             lignes_rouge.append(f" - {compte_man} : {montant_man}")
                             comptes_manuels_pour_db.append((compte_man, "")) # Pas de mot clé pour le manuel
+                            ecritures_a_sauvegarder.append({"compte": compte_man, "montant": montant_man})
                     
                     update_db = st.checkbox("Mettre à jour les règles par défaut pour ce fournisseur avec ces comptes ?")
 
@@ -385,6 +389,7 @@ def main():
                         valeur_modifiee = st.text_input(f"Montant pour {compte}", value=valeur_defaut, key=f"input_{i}_{current_file_name}")
                         if valeur_modifiee:
                             lignes_rouge.append(f" - {compte} : {valeur_modifiee}")
+                            ecritures_a_sauvegarder.append({"compte": compte, "montant": valeur_modifiee})
                 
                 # -------------------------------------------------
                 # Ajout des options de paiement (DÉPLACÉ ICI)
@@ -449,6 +454,17 @@ def main():
                     nom_fichier_final = f"{nom_clean}_{date_str}.pdf"
                     chemin_final = os.path.join(READY_DIR, nom_fichier_final)
 
+                    # 2.5 Sauvegarde en BDD des écritures
+                    for ecriture in ecritures_a_sauvegarder:
+                        ajouter_ecriture_comptable(
+                            compte=ecriture["compte"],
+                            date_facture=new_date_obj,
+                            fournisseur=nom_fournisseur_final,
+                            montant=ecriture["montant"],
+                            nom_fichier=nom_fichier_final,
+                            db_url=db_url
+                        )
+
                     # Compression du PDF vers le dossier READY
                     with st.spinner("Traitement et compression..."):
                         compresser_pdf(temp_working_path, chemin_final)
@@ -475,6 +491,7 @@ def main():
                         for k in keys_to_reset:
                             if k in st.session_state: del st.session_state[k]
                         st.rerun()
+
 
             # --- COLONNE DROITE : PREVIEW ---
             with col2:

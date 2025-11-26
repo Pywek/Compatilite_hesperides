@@ -38,6 +38,27 @@ def initialiser_bdd(db_url: str):
         conn = get_db_connection(db_url)
         cursor = conn.cursor()
         cursor.execute(create_table_sql)
+        
+        # Création de la table des écritures comptables
+        create_ecritures_sql = """
+        CREATE TABLE IF NOT EXISTS ecritures_comptables (
+            id SERIAL PRIMARY KEY,
+            compte TEXT,
+            date_facture DATE,
+            fournisseur TEXT,
+            montant NUMERIC,
+            nom_fichier TEXT
+        );
+        """
+        cursor.execute(create_ecritures_sql)
+        
+        # Ajout de la colonne date_ajout si elle n'existe pas
+        try:
+            cursor.execute("ALTER TABLE ecritures_comptables ADD COLUMN IF NOT EXISTS date_ajout TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+        except Exception as e:
+            print(f"⚠️ Note: Erreur lors de l'ajout de date_ajout (peut-être déjà existante): {e}")
+            conn.rollback()
+        
         conn.commit()
         print(f"✅ Base de données initialisée (PostgreSQL)")
         return True
@@ -302,6 +323,125 @@ def update_fournisseur_full(old_nom_fournisseur: str, new_data: dict, db_url: st
         return True
     except Exception as e:
         print(f"Erreur BDD (update full) : {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def ajouter_ecriture_comptable(compte, date_facture, fournisseur, montant, nom_fichier, db_url):
+    """
+    Ajoute une écriture comptable dans la base de données.
+    """
+    conn = None
+    try:
+        conn = get_db_connection(db_url)
+        cursor = conn.cursor()
+        
+        # On force l'insertion de la date d'ajout
+        sql_query = """
+        INSERT INTO ecritures_comptables (compte, date_facture, fournisseur, montant, nom_fichier, date_ajout)
+        VALUES (%s, %s, %s, %s, %s, NOW())
+        """
+        
+        cursor.execute(sql_query, (compte, date_facture, fournisseur, montant, nom_fichier))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Erreur BDD (ajout écriture) : {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def get_toutes_ecritures(db_url):
+    """
+    Récupère toutes les écritures comptables triées par date décroissante.
+    """
+    conn = None
+    try:
+        conn = get_db_connection(db_url)
+        cursor = conn.cursor()
+        
+        sql_query = """
+        SELECT id, date_facture, fournisseur, compte, montant, nom_fichier, date_ajout
+        FROM ecritures_comptables
+        ORDER BY date_facture DESC, id DESC
+        """
+        cursor.execute(sql_query)
+        rows = cursor.fetchall()
+        
+        # Conversion en liste de dictionnaires
+        ecritures = []
+        colonnes = [desc[0] for desc in cursor.description]
+        
+        for row in rows:
+            ecritures.append(dict(zip(colonnes, row)))
+            
+        return ecritures
+    except Exception as e:
+        print(f"Erreur BDD (get_all_ecritures) : {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+def update_ecriture(id_ecriture, data, db_url):
+    """
+    Met à jour une écriture comptable.
+    data est un dictionnaire contenant les champs à modifier.
+    """
+    conn = None
+    try:
+        conn = get_db_connection(db_url)
+        cursor = conn.cursor()
+        
+        # Champs autorisés à la modification
+        allowed_fields = ["date_facture", "fournisseur", "compte", "montant", "nom_fichier"]
+        
+        set_clauses = []
+        values = []
+        
+        for field in allowed_fields:
+            if field in data:
+                set_clauses.append(f"{field} = %s")
+                values.append(data[field])
+        
+        if not set_clauses:
+            return False
+            
+        values.append(id_ecriture)
+        
+        sql_query = f"""
+        UPDATE ecritures_comptables
+        SET {', '.join(set_clauses)}
+        WHERE id = %s
+        """
+        
+        cursor.execute(sql_query, values)
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Erreur BDD (update_ecriture) : {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def delete_ecriture(id_ecriture, db_url):
+    """
+    Supprime une écriture comptable.
+    """
+    conn = None
+    try:
+        conn = get_db_connection(db_url)
+        cursor = conn.cursor()
+        
+        sql_query = "DELETE FROM ecritures_comptables WHERE id = %s"
+        cursor.execute(sql_query, (id_ecriture,))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Erreur BDD (delete_ecriture) : {e}")
         return False
     finally:
         if conn:
