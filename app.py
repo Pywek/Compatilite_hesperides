@@ -364,16 +364,6 @@ def ajout_factures_page():
                     if compte:
                         comptes_regles.append((compte, regle))
                 
-                submitted = st.form_submit_button("Enregistrer")
-                
-                # Bouton Annuler hors du form submit standard (astuce: st.form_submit_button est le seul moyen d'interagir dans un form)
-                # Mais on veut un bouton qui fait autre chose. Dans un st.form, tous les boutons soumettent.
-                # On va utiliser le submit pour gérer les deux cas via un flag ou sortir du form si possible.
-                # Streamlit forms: "Every button inside a form will trigger a form submission."
-                # Donc on ajoute un bouton "Annuler" qui soumet aussi, mais on check lequel a été cliqué ?
-                # Non, st.form_submit_button retourne True. On ne peut pas en avoir deux facilement qui font des choses différentes sans logique complexe.
-                # Alternative: Sortir le bouton Annuler du form ? Non, visuellement moche.
-                # On va utiliser des colonnes pour les boutons submit.
                 
                 c_submit, c_cancel = st.columns(2)
                 with c_submit:
