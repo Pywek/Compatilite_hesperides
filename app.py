@@ -7,13 +7,13 @@ import zipfile
 import io
 from datetime import datetime
 from dotenv import load_dotenv
-from src.gestion_bdd import initialiser_bdd, bdd_est_disponible, ajouter_fournisseur_db, trouver_associations_fournisseur, update_regles_fournisseur, ajouter_ecriture_comptable
+from src.gestion_bdd import initialiser_bdd, bdd_est_disponible, ajouter_fournisseur_db, trouver_associations_fournisseur, update_regles_fournisseur, ajouter_ecriture_comptable, get_fournisseur_info, get_fournisseur_details, update_fournisseur_full
 from src.appels_ia import initialisation_client_gemini, get_infos_facture, application_regle_imputation_V2
 from src.pdf_manager import ajouter_texte_definitif
 from src.compression_pdf import compresser_pdf
 
 # Configuration de la page
-st.set_page_config(page_title="Comptabilité IA", page_icon="📄", layout="wide")
+
 
 # Chargement des variables d'environnement
 load_dotenv()
@@ -38,8 +38,52 @@ def cleanup_temp_files():
         os.makedirs(TEMP_DIR, exist_ok=True)
         os.makedirs(READY_DIR, exist_ok=True)
 
+@st.dialog("Modifier le fournisseur")
+def show_edit_supplier_dialog(nom_fournisseur, db_url):
+    data_fournisseur = get_fournisseur_details(nom_fournisseur, db_url)
+    if not data_fournisseur:
+        st.error("Impossible de récupérer les données du fournisseur.")
+        return
 
-def main():
+    with st.form("edit_fournisseur_dialog_form"):
+        st.write(f"Modification pour : **{nom_fournisseur}**")
+        
+        c1, c2 = st.columns(2)
+        new_associe = c1.text_input("Fournisseur Associé", value=data_fournisseur["fournisseur_associe"] or "")
+        new_mode = c2.selectbox("Mode", ["A", "M"], index=0 if data_fournisseur["mode"] == "A" else 1, format_func=lambda x: "Automatique" if x == "A" else "Manuel")
+
+        st.markdown("#### Comptes et Règles")
+        new_comptes_regles = {}
+        for i in range(1, 7):
+            cc1, cc2 = st.columns(2)
+            compte_key = f"compte{i}"
+            regle_key = f"regle{i}"
+            
+            val_compte = data_fournisseur.get(compte_key) or ""
+            val_regle = data_fournisseur.get(regle_key) or ""
+            
+            new_comptes_regles[compte_key] = cc1.text_input(f"Compte {i}", value=val_compte)
+            new_comptes_regles[regle_key] = cc2.text_input(f"Règle {i}", value=val_regle)
+
+        submitted = st.form_submit_button("Enregistrer les modifications")
+        
+        if submitted:
+            update_data = {
+                "fournisseur": nom_fournisseur, # On ne change pas le nom ici pour simplifier
+                "fournisseur_associe": new_associe,
+                "mode": new_mode,
+                **new_comptes_regles
+            }
+            
+            if update_fournisseur_full(nom_fournisseur, update_data, db_url):
+                st.success("Fournisseur mis à jour !")
+                st.rerun()
+            else:
+                st.error("Erreur lors de la mise à jour.")
+
+
+def ajout_factures_page():
+    st.set_page_config(page_title="Ajout de factures", page_icon="📄", layout="wide")
     st.title("📄 Assistant Comptabilité IA")
 
     # Nettoyage au démarrage (une seule fois par session)
@@ -52,16 +96,14 @@ def main():
         st.header("État du Système")
         
         # Vérification API Key
-        if os.getenv("GENAI_KEY"):
-            st.success("Clé API Gemini détectée")
-        else:
+        if not os.getenv("GENAI_KEY"):
             st.error("Clé API Gemini manquante (.env)")
             st.stop()
 
         # Vérification BDD
         db_url = os.getenv("DATABASE_URL")
         if db_url and initialiser_bdd(db_url) and bdd_est_disponible(db_url):
-            st.success("Base de données connectée (PostgreSQL)")
+            st.success("Base de données connectée")
         else:
             st.error("Base de données indisponible (Vérifiez .env)")
             st.stop()
@@ -69,7 +111,7 @@ def main():
         # Initialisation Client Gemini
         client = initialisation_client_gemini()
         if client:
-            st.success("Client Gemini prêt")
+            st.success("Client IA prêt")
         else:
             st.error("Erreur client Gemini")
             st.stop()
@@ -122,7 +164,7 @@ def main():
         accept_multiple_files=True,
         key=f"uploader_{st.session_state['uploader_key']}"
     )
-
+    
     if uploaded_files_obj:
         # Nouvelle série : on nettoie le message de succès précédent
         if "batch_finished" in st.session_state:
@@ -286,15 +328,25 @@ def main():
         nom_fournisseur = st.session_state["fournisseur"]
         date_facture_init = st.session_state["date_facture"]
 
-        st.subheader(f"Fournisseur : {nom_fournisseur}")
+        nom_fournisseur = st.session_state["fournisseur"]
+        date_facture_init = st.session_state["date_facture"]
+
+        c_title, c_btn = st.columns([3, 1])
+        c_title.subheader(f"Fournisseur : {nom_fournisseur}")
+        if c_btn.button("Modifier le fournisseur"):
+            show_edit_supplier_dialog(nom_fournisseur, db_url)
 
         # Étape 2 : Recherche en BDD
         associations = trouver_associations_fournisseur(nom_fournisseur, db_url)
 
         if not associations and "creation_mode" not in st.session_state:
             st.warning(f"Fournisseur inconnu : {nom_fournisseur}")
-            if st.button("Créer ce fournisseur"):
+            c1, c2 = st.columns(2)
+            if c1.button("Créer ce fournisseur"):
                 st.session_state["creation_mode"] = True
+                st.rerun()
+            if c2.button("Accéder à la facture (Mode Manuel)"):
+                st.session_state["force_manual_mode"] = True
                 st.rerun()
 
         # Formulaire de création (inchangé)
@@ -313,16 +365,37 @@ def main():
                         comptes_regles.append((compte, regle))
                 
                 submitted = st.form_submit_button("Enregistrer")
-                if submitted:
+                
+                # Bouton Annuler hors du form submit standard (astuce: st.form_submit_button est le seul moyen d'interagir dans un form)
+                # Mais on veut un bouton qui fait autre chose. Dans un st.form, tous les boutons soumettent.
+                # On va utiliser le submit pour gérer les deux cas via un flag ou sortir du form si possible.
+                # Streamlit forms: "Every button inside a form will trigger a form submission."
+                # Donc on ajoute un bouton "Annuler" qui soumet aussi, mais on check lequel a été cliqué ?
+                # Non, st.form_submit_button retourne True. On ne peut pas en avoir deux facilement qui font des choses différentes sans logique complexe.
+                # Alternative: Sortir le bouton Annuler du form ? Non, visuellement moche.
+                # On va utiliser des colonnes pour les boutons submit.
+                
+                c_submit, c_cancel = st.columns(2)
+                with c_submit:
+                    is_submitted = st.form_submit_button("Enregistrer")
+                with c_cancel:
+                    is_cancelled = st.form_submit_button("Annuler et passer en mode manuel")
+
+                if is_submitted:
                     if ajouter_fournisseur_db(nom_fournisseur, fournisseur_associe, mode, comptes_regles, db_url):
                         st.success("Fournisseur créé !")
                         del st.session_state["creation_mode"]
                         st.rerun()
                     else:
                         st.error("Erreur lors de la création.")
+                
+                if is_cancelled:
+                    st.session_state["force_manual_mode"] = True
+                    del st.session_state["creation_mode"]
+                    st.rerun()
 
         # Étape 3 : Extraction et Validation (Live Preview)
-        elif associations:
+        elif associations or st.session_state.get("force_manual_mode"):
             # Extraction IA si pas faite
             if "imputations" not in st.session_state:
                 with st.spinner("Extraction des données..."):
@@ -337,7 +410,32 @@ def main():
                     else:
                         st.session_state["imputations"] = tuple()
 
-            st.subheader("Validation & Prévisualisation")
+            st.subheader("Prévisualisation & Validation")
+            
+            # Injection CSS pour les boutons
+            st.markdown("""
+            <style>
+            /* Bouton Valider (Primary) -> Vert */
+            div[data-testid="stButton"] button[kind="primary"] {
+                background-color: #28a745 !important;
+                border-color: #28a745 !important;
+                color: white !important;
+            }
+            /* Bouton Ignorer (Secondary) -> Rouge */
+            /* On cible le bouton qui contient le texte "Ignorer cette facture" via une astuce ou on suppose que c'est le seul secondaire ici */
+            /* Streamlit ne permet pas de cibler facilement par texte en CSS pur. 
+               On va utiliser une classe générique pour les boutons secondaires dans cette zone si possible, 
+               mais attention aux effets de bord. 
+               Pour l'instant, on laisse le rouge pour le bouton secondaire si on peut, sinon on accepte le défaut.
+               ASTUCE : On peut utiliser le nth-of-type si la structure est fixe.
+            */
+            div[data-testid="column"]:has(button:contains("Ignorer")) button {
+                 background-color: #dc3545 !important;
+                 border-color: #dc3545 !important;
+                 color: white !important;
+            }
+            </style>
+            """, unsafe_allow_html=True)
             
             col1, col2 = st.columns([1, 1])
             
@@ -346,7 +444,16 @@ def main():
                 st.markdown("### Données")
                 
                 # Mode Saisie Manuelle
-                mode_manuel = st.toggle("✏️ Saisie Manuelle", key=f"manual_mode_{current_file_name}")
+                is_manual = st.session_state.get("force_manual_mode", False)
+                
+                # Si pas forcé, on regarde la config du fournisseur
+                if not is_manual and associations:
+                    mode_fournisseur = get_fournisseur_info(nom_fournisseur, db_url)
+                    if mode_fournisseur == 'M':
+                        is_manual = True
+                    # Si 'A', on laisse False par défaut
+                
+                mode_manuel = st.toggle("✏️ Saisie Manuelle", value=is_manual, key=f"manual_mode_{current_file_name}")
 
                 # Nom du fournisseur modifiable
                 nom_fournisseur_final = st.text_input("Nom du fournisseur", value=nom_fournisseur)
@@ -425,8 +532,28 @@ def main():
                 
                 st.markdown("---")
                 st.markdown("---")
-                # Bouton de validation modifié pour le flux ZIP
-                if st.button("Valider et Suivant"):
+                
+                c_skip, c_val = st.columns([1, 1])
+                
+                # Bouton Ignorer (Gauche, Rouge/Secondaire)
+                if c_skip.button("Ignorer cette facture"):
+                     # Passage au fichier suivant sans sauvegarde
+                    if st.session_state["current_index"] + 1 >= len(files_to_process):
+                        # C'était le dernier fichier
+                        st.session_state["batch_finished"] = True
+                        st.session_state["uploader_key"] += 1 # Reset du uploader
+                        st.rerun()
+                    else:
+                        # Passage au fichier suivant
+                        st.session_state["current_index"] += 1
+                        # Reset des états pour le prochain
+                        keys_to_reset = ["fournisseur", "date_facture", "imputations", "pdf_processed", "creation_mode", "current_file", "force_manual_mode"]
+                        for k in keys_to_reset:
+                            if k in st.session_state: del st.session_state[k]
+                        st.rerun()
+
+                # Bouton Valider (Droite, Vert/Primaire)
+                if c_val.button("Valider et Suivant", type="primary"):
                     # 0. Mise à jour BDD si demandé
                     if mode_manuel and update_db and comptes_manuels_pour_db:
                         if update_regles_fournisseur(nom_fournisseur_final, comptes_manuels_pour_db, db_url):
@@ -493,6 +620,8 @@ def main():
                         st.rerun()
 
 
+
+
             # --- COLONNE DROITE : PREVIEW ---
             with col2:
                 st.markdown("### Prévisualisation")
@@ -508,4 +637,9 @@ def main():
                         st.download_button("📄 Télécharger la prévisualisation", f, file_name="preview.pdf", mime="application/pdf")
 
 if __name__ == "__main__":
-    main()
+    pg = st.navigation([
+        st.Page(ajout_factures_page, title="Ajout de factures", icon="📄"),
+        st.Page("pages/1_Gestion_Fournisseurs.py", title="Gestion Fournisseurs", icon="👥"),
+        st.Page("pages/02_Ecritures_Comptables.py", title="Ecritures Comptables", icon="📊"),
+    ])
+    pg.run()

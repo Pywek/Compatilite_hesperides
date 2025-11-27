@@ -123,6 +123,39 @@ def get_fournisseur_info(fournisseur_id, db_url: str):
         if conn:
             conn.close()
 
+def get_fournisseur_details(nom_fournisseur: str, db_url: str):
+    """
+    Récupère toutes les infos d'un fournisseur par son nom.
+    """
+    if not nom_fournisseur:
+        return None
+        
+    conn = None
+    try:
+        conn = get_db_connection(db_url)
+        cursor = conn.cursor()
+        
+        sql_query = """
+        SELECT id, fournisseur, fournisseur_associe, mode,
+               compte1, regle1, compte2, regle2, compte3, regle3,
+               compte4, regle4, compte5, regle5, compte6, regle6
+        FROM fournisseurs_comptes_associes
+        WHERE UPPER(fournisseur) = UPPER(%s)
+        """
+        cursor.execute(sql_query, (nom_fournisseur,))
+        row = cursor.fetchone()
+        
+        if row:
+            colonnes = [desc[0] for desc in cursor.description]
+            return dict(zip(colonnes, row))
+        return None
+    except Exception as e:
+        print(f"Erreur BDD (get_details) : {e}")
+        return None
+    finally:
+        if conn:
+            conn.close()
+
 def trouver_associations_fournisseur(nom_fournisseur: str, db_url: str):
     """
     Recherche les associations (compte, règle) pour un fournisseur donné.
